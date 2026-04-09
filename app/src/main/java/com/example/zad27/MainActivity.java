@@ -2,7 +2,6 @@ package com.example.zad27;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.widget.CompoundButton;
@@ -15,18 +14,17 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String PREFS_NAME = "StudySessionPrefs";
-    private static final String KEY_REMINDERS = "RemindersEnabled";
-    private static final String KEY_SESSION_MINUTES = "SessionMinutes";
-
     private static final int DEFAULT_SESSION_MINUTES = 45;
     private static final String KEY_HISTORY = "SessionHistory";
+    private static final String KEY_ADAPTIVE_BREAK = "AdaptiveBreak";
+
     private Switch switchReminders;
+    private Switch switchAdaptiveBreak;
     private SeekBar seekBarSession;
     private TextView tvSessionValue;
     private TextView tvSummary;
 
-    private SharedPreferences sharedPreferences;
+    private SessionPreferencesHelper prefsHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -34,26 +32,32 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         switchReminders = findViewById(R.id.switchReminders);
+        switchAdaptiveBreak = findViewById(R.id.switchAdaptiveBreak);
         seekBarSession = findViewById(R.id.seekBarSession);
         tvSessionValue = findViewById(R.id.tvSessionValue);
         tvSummary = findViewById(R.id.tvSummary);
 
-        sharedPreferences = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        prefsHelper = new SessionPreferencesHelper(this);
 
         loadSettings();
         setupListeners();
     }
 
     private void setupListeners() {
-        switchReminders.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                saveBoolean(KEY_REMINDERS, isChecked);
-                updateSummary();
-            }
+
+        switchReminders.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            prefsHelper.saveRemindersEnabled(isChecked);
+            updateSummary();
+        });
+
+        switchAdaptiveBreak.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            getSharedPreferences("StudySessionPrefs", MODE_PRIVATE)
+                    .edit().putBoolean(KEY_ADAPTIVE_BREAK, isChecked).apply();
+            updateSummary();
         });
 
         seekBarSession.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 int minutes = progressToMinutes(progress);
@@ -66,28 +70,40 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
-                saveInt(KEY_SESSION_MINUTES, progressToMinutes(seekBar.getProgress()));
                 int min = progressToMinutes(seekBar.getProgress());
-                saveInt(KEY_SESSION_MINUTES, min);
-                if(min > 70 && !switchReminders.isChecked()) {
-                    Toast.makeText(MainActivity.this, "dlugie sesje wymagaja przypomnien", Toast.LENGTH_SHORT).show();
+
+                prefsHelper.saveSessionMinutes(min);
+
+                // zadanie 1
+                if (min > 70 && !switchReminders.isChecked()) {
+                    Toast.makeText(MainActivity.this,
+                            "Długie sesje wymagają przypomnień",
+                            Toast.LENGTH_SHORT).show();
+
+                    switchReminders.setChecked(true);
+                    prefsHelper.saveRemindersEnabled(true);
                 }
+
+                updateHistory(min);
             }
         });
     }
 
     private void loadSettings() {
-        boolean remindersEnabled = sharedPreferences.getBoolean(KEY_REMINDERS, true);
-        int sessionMinutes = sharedPreferences.getInt(KEY_SESSION_MINUTES, DEFAULT_SESSION_MINUTES);
+        boolean reminders = prefsHelper.loadRemindersEnabled();
+        int minutes = prefsHelper.loadSessionMinutes(DEFAULT_SESSION_MINUTES);
 
-        switchReminders.setChecked(remindersEnabled);
-        seekBarSession.setProgress(minutesToProgress(sessionMinutes));
+        boolean adaptive = getSharedPreferences("StudySessionPrefs", MODE_PRIVATE)
+                .getBoolean(KEY_ADAPTIVE_BREAK, false);
 
-        updateSessionLabel(sessionMinutes);
+        switchReminders.setChecked(reminders);
+        switchAdaptiveBreak.setChecked(adaptive);
+        seekBarSession.setProgress(minutesToProgress(minutes));
+
+        updateSessionLabel(minutes);
         updateSummary();
     }
 
-    // Zakres: 15..90 minut, krok 5 minut.
     private int progressToMinutes(int progress) {
         return 15 + (progress * 5);
     }
@@ -97,9 +113,13 @@ public class MainActivity extends AppCompatActivity {
         return (clamped - 15) / 5;
     }
 
-    private int calculateFocusPoints(int minutes, boolean remindersEnabled) {
+    private int calculateFocusPoints(int minutes, boolean reminders) {
         int base = minutes / 5;
-        return remindersEnabled ? base + 2 : base;
+        return reminders ? base + 2 : base;
+    }
+
+    private int calculateBreak(int minutes) {
+        return (int) Math.ceil(minutes * 0.2);
     }
 
     private void updateSessionLabel(int minutes) {
@@ -108,28 +128,68 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateSummary() {
         boolean reminders = switchReminders.isChecked();
+        boolean adaptive = switchAdaptiveBreak.isChecked();
         int minutes = progressToMinutes(seekBarSession.getProgress());
+
         int points = calculateFocusPoints(minutes, reminders);
+        int avg = calculateAverage();
 
         String reminderText = reminders ? "włączone" : "wyłączone";
+
+        String breakText = "";
+        if (adaptive) {
+            breakText = "\n• Przerwa: " + calculateBreak(minutes) + " min";
+        }
+
         String summary = "Plan sesji:\n"
                 + "• Czas: " + minutes + " min\n"
                 + "• Przypomnienia: " + reminderText + "\n"
-                + "• Punkty skupienia: " + points;
+                + "• Punkty: " + points + "\n"
+                + "• Średnia: " + avg + " min"
+                + breakText;
 
         tvSummary.setText(summary);
         tvSummary.setTextColor(getLoadColor(minutes));
     }
-    private int getLoadColor(int minutes){
-        if(minutes <= 35) return Color.GREEN;
-        if(minutes <=60) return Color.rgb(255, 160, 0);
+
+    private int getLoadColor(int minutes) {
+        if (minutes <= 35) return Color.GREEN;
+        if (minutes <= 60) return Color.rgb(255, 160, 0);
         return Color.RED;
     }
-    private void saveBoolean(String key, boolean value) {
-        sharedPreferences.edit().putBoolean(key, value).apply();
+
+
+    private void updateHistory(int newValue) {
+        String history = getSharedPreferences("StudySessionPrefs", MODE_PRIVATE)
+                .getString(KEY_HISTORY, "");
+
+        String[] parts = history.isEmpty() ? new String[]{} : history.split(",");
+
+        StringBuilder newHistory = new StringBuilder();
+
+        for (int i = Math.max(0, parts.length - 4); i < parts.length; i++) {
+            newHistory.append(parts[i]).append(",");
+        }
+
+        newHistory.append(newValue);
+
+        getSharedPreferences("StudySessionPrefs", MODE_PRIVATE)
+                .edit().putString(KEY_HISTORY, newHistory.toString()).apply();
     }
 
-    private void saveInt(String key, int value) {
-        sharedPreferences.edit().putInt(key, value).apply();
+    private int calculateAverage() {
+        String history = getSharedPreferences("StudySessionPrefs", MODE_PRIVATE)
+                .getString(KEY_HISTORY, "");
+
+        if (history.isEmpty()) return 0;
+
+        String[] parts = history.split(",");
+        int sum = 0;
+
+        for (String p : parts) {
+            sum += Integer.parseInt(p);
+        }
+
+        return sum / parts.length;
     }
 }

@@ -8,39 +8,47 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
         android:text="Konfigurator sesji nauki"
         android:textSize="24sp"
         android:textStyle="bold"
-        android:layout_marginBottom="24dp" />
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="24dp"/>
 
     <Switch
         android:id="@+id/switchReminders"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Przypomnienia"
-        android:textSize="18sp" />
+        android:textSize="18sp"/>
+
+    <Switch
+        android:id="@+id/switchAdaptiveBreak"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Tryb adaptacyjnej przerwy"
+        android:textSize="18sp"
+        android:layout_marginTop="10dp"/>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Długość sesji"
         android:textSize="18sp"
-        android:layout_marginTop="20dp" />
+        android:layout_marginTop="20dp"/>
 
     <TextView
         android:id="@+id/tvSessionValue"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="45 min"
-        android:layout_marginTop="6dp" />
+        android:layout_marginTop="6dp"/>
 
     <SeekBar
         android:id="@+id/seekBarSession"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:max="15"
-        android:progress="6" />
+        android:progress="6"/>
 
     <TextView
         android:id="@+id/tvSummary"
@@ -50,6 +58,6 @@
         android:padding="12dp"
         android:background="#EEEEEE"
         android:text="Podsumowanie"
-        android:textSize="16sp" />
+        android:textSize="16sp"/>
 
 </LinearLayout>
